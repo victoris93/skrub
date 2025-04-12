@@ -15,6 +15,7 @@ __all__ = [
     "string",
     "boolean",
     "cardinality_below",
+    "cardinality_above_1",
     "has_nulls",
 ]
 
@@ -452,6 +453,14 @@ def _cardinality_below(column, threshold):
         return False
 
 
+def _cardinality_above(column, threshold):
+    try:
+        return sbd.n_unique(column) > threshold
+    except Exception:
+        # ``n_unique`` can fail for example for polars columns with dtype Object
+        return False
+
+
 def cardinality_below(threshold):
     """
     Select columns whose cardinality (number of unique values) is (strictly)
@@ -494,6 +503,42 @@ def cardinality_below(threshold):
 
     """
     return Filter(_cardinality_below, args=(threshold,), name="cardinality_below")
+
+
+def cardinality_above_1():
+    """
+    Select columns whose cardinality (number of unique values) is strictly
+    above 1.
+
+    Null values do not count in the cardinality.
+
+    Examples
+    --------
+    >>> from skrub import _selectors as s
+    >>> import pandas as pd
+    >>> df = pd.DataFrame(
+    ...     dict(
+    ...         a1=[1, 1, 1, None],
+    ...         a2=[1, 1, 2, None],
+    ...         a2_b=[1, 1, 2, 2],
+    ...         a3=[1, 2, 3, None],
+    ...         a3_b=[1, 2, 3, 3],
+    ...         a4=[1, 2, 3, 4],
+    ...     )
+    ... ).convert_dtypes()
+    >>> df
+          a1    a2  a2_b    a3  a3_b  a4
+    0     1     1     1     1     1   1
+    1     1     1     1     2     2   2
+    2     1     2     2     3     3   3
+    3  <NA>   <NA>   <NA>   <NA>   <NA>   <NA>
+    >>> s.select(df, s.cardinality_above_1())
+          a2   a2_b   a3   a3_b   a4
+    0     1      1      1      1      1
+    1     1      1      2      2      2
+    """
+    threshold = 1
+    return Filter(_cardinality_above, args=(threshold,), name="cardinality_above_1")
 
 
 def has_nulls():

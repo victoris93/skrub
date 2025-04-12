@@ -159,6 +159,10 @@ class Cleaner(TransformerMixin, BaseEstimator):
         ``None``, this selection is disabled: no columns are dropped based on the
         number of null values they contain.
 
+    drop_cardinality_1 : bool, default=False
+        If ``True``, the columns with cardinality of 1 (number of unique values) are
+        dropped. By default they are kept.
+
     n_jobs : int, default=None
         Number of jobs to run in parallel.
         ``None`` means 1 unless in a joblib ``parallel_backend`` context.
@@ -253,8 +257,9 @@ class Cleaner(TransformerMixin, BaseEstimator):
         representation.
     """
 
-    def __init__(self, drop_null_fraction=1.0, n_jobs=1):
+    def __init__(self, drop_null_fraction=1.0, drop_cardinality_1=False, n_jobs=1):
         self.drop_null_fraction = drop_null_fraction
+        self.drop_cardinality_1 = drop_cardinality_1
         self.n_jobs = n_jobs
 
     def fit_transform(self, X, y=None):
@@ -275,6 +280,9 @@ class Cleaner(TransformerMixin, BaseEstimator):
         dataframe
             The transformed input.
         """
+        if self.drop_cardinality_1:
+            X = self._drop_cardinality_1(X)
+
         all_steps = _get_preprocessors(
             cols=s.all(),
             drop_null_fraction=self.drop_null_fraction,
@@ -325,6 +333,9 @@ class Cleaner(TransformerMixin, BaseEstimator):
         """
         self.fit_transform(X, y=y)
         return self
+
+    def _drop_cardinality_1(self, X):
+        return s.select(X, s.cardinality_above_1())
 
 
 class SimpleCleaner(Cleaner):
@@ -427,6 +438,10 @@ class TableVectorizer(TransformerMixin, BaseEstimator):
         is strictly larger than `drop_null_fraction`. If `drop_null_fraction` is ``None``,
         this selection is disabled: no columns are dropped based on the number
         of null values they contain.
+
+    drop_cardinality_1 : bool, default=False
+        If ``True``, the columns with cardinality of 1 (number of unique values) are
+        dropped. By default they are kept.
 
     n_jobs : int, default=None
         Number of jobs to run in parallel.
@@ -651,6 +666,7 @@ class TableVectorizer(TransformerMixin, BaseEstimator):
         datetime=DATETIME_TRANSFORMER,
         specific_transformers=(),
         drop_null_fraction=1.0,
+        drop_cardinality_1=False,
         n_jobs=None,
     ):
         self.cardinality_threshold = cardinality_threshold
@@ -663,6 +679,7 @@ class TableVectorizer(TransformerMixin, BaseEstimator):
         self.numeric = _utils.clone_if_default(numeric, NUMERIC_TRANSFORMER)
         self.datetime = _utils.clone_if_default(datetime, DATETIME_TRANSFORMER)
         self.specific_transformers = specific_transformers
+        self.drop_cardinality_1 = drop_cardinality_1
         self.n_jobs = n_jobs
         self.drop_null_fraction = drop_null_fraction
 
@@ -705,6 +722,9 @@ class TableVectorizer(TransformerMixin, BaseEstimator):
         dataframe
             The transformed input.
         """
+        if self.drop_cardinality_1:
+            X = self._drop_cardinality_1(X)
+
         self._check_specific_columns()
         self._make_pipeline()
         output = self._pipeline.fit_transform(X, y=y)
@@ -733,6 +753,9 @@ class TableVectorizer(TransformerMixin, BaseEstimator):
         """
         check_is_fitted(self, "transformers_")
         return self._pipeline.transform(X)
+
+    def _drop_cardinality_1(self, X):
+        return s.select(X, s.cardinality_above_1())
 
     def _check_specific_columns(self):
         specific_columns = {}
@@ -818,6 +841,15 @@ class TableVectorizer(TransformerMixin, BaseEstimator):
             s.all() - _created_by(*self._specific_transformers) - s.categorical(),
             allow_reject=True,
         )
+
+        if self.drop_cardinality_1:
+            add_step(
+                self._postprocessors,
+                Drop(),
+                s.cardinality_below(2),
+                allow_reject=True,
+            )
+
         self._pipeline = make_pipeline(
             *self._preprocessors,
             *self._encoders,

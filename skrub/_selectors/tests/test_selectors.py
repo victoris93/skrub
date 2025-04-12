@@ -17,6 +17,8 @@ def test_repr():
     (numeric() | (glob('*_mm') - regex('^[ 0-9]+_mm$')))
     >>> s.cardinality_below(30)
     cardinality_below(30)
+    >>> s.cardinality_above_1()
+    cardinality_above_1(1)
     >>> s.string() | s.any_date() | s.categorical()
     ((string() | any_date()) | categorical())
     >>> s.float() & s.integer()
@@ -50,19 +52,29 @@ def test_dtype_selectors(df_module):
     df = df_module.example_dataframe
     cat_col = sbd.rename(sbd.to_categorical(sbd.col(df, "str-col")), "cat-col")
     df = sbd.make_dataframe_like(df, sbd.to_column_list(df) + [cat_col])
-    assert s.numeric().expand(df) == ["int-col", "int-not-null-col", "float-col"]
+    assert s.numeric().expand(df) == [
+        "int-col",
+        "int-not-null-col",
+        "float-col",
+        "cardinality-one-col",
+    ]
     assert (s.numeric() | s.boolean()).expand(df) == [
         "int-col",
         "int-not-null-col",
         "float-col",
         "bool-col",
         "bool-not-null-col",
+        "cardinality-one-col",
     ]
     if df_module.description == "pandas-numpy-dtypes":
-        int_cols = ["int-not-null-col"]
+        int_cols = ["int-not-null-col", "cardinality-one-col"]
         float_cols = ["int-col", "float-col"]
     else:
-        int_cols = ["int-col", "int-not-null-col"]
+        int_cols = [
+            "int-col",
+            "int-not-null-col",
+            "cardinality-one-col",
+        ]
         float_cols = ["float-col"]
     assert s.integer().expand(df) == int_cols
     assert s.float().expand(df) == float_cols
@@ -76,9 +88,28 @@ def test_dtype_selectors(df_module):
         assert s.any_date().expand(df) == ["datetime-col"]
 
 
+def test_cardinality_above_1(df_module):
+    df = df_module.example_dataframe
+    card_above_1_cols = [
+        "int-col",
+        "int-not-null-col",
+        "float-col",
+        "str-col",
+        "bool-col",
+        "bool-not-null-col",
+        "datetime-col",
+        "date-col",
+    ]
+    assert s.cardinality_above_1().expand(df) == card_above_1_cols
+
+
 def test_cardinality_below(df_module, monkeypatch):
     df = df_module.example_dataframe
-    assert s.cardinality_below(3).expand(df) == ["bool-col", "bool-not-null-col"]
+    assert s.cardinality_below(3).expand(df) == [
+        "bool-col",
+        "bool-not-null-col",
+        "cardinality-one-col",
+    ]
     assert s.cardinality_below(4).expand(df) == (
         s.all() - "date-col" - "int-not-null-col"
     ).expand(df)

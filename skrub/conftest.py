@@ -16,6 +16,7 @@ def _example_data_dict():
         "str-col": ["one", None, "three", "four"],
         "bool-col": [False, True, None, True],
         "bool-not-null-col": [False, True, True, True],
+        "cardinality-one-col": [5, 5, 5, 5],
         "datetime-col": [
             datetime.datetime.fromisoformat(dt)
             for dt in [
